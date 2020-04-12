@@ -1,0 +1,366 @@
+     *----------------<         PROGRAM INFORMATION          >----------------*
+     *                                                                        *
+     * Módulo      : Logístico.                                               *
+     * Programa    : LO0010RP                                                 *
+     * Descripción : Centro de control de transacciones.                      *
+     * Autor       : Daniel Gutierrez Paz.                                    *
+     * Fecha       : 16 de Enero del 2020.                                    *
+     *                                                                        *
+     *------------------------------------------------------------------------*
+     *------------------------------------------------------------------------*
+     *---------------------------< SETUP PROGRAM RPGLE >----------------------*
+     *------------------------------------------------------------------------*
+     HDFTACTGRP(*NO) ACTGRP(*CALLER)
+     HDATFMT(*ISO)
+     HTIMFMT(*HMS)
+     *------------------------------------------------------------------------*
+     *---------------------------<    EXTERNAL FILES   >----------------------*
+     *------------------------------------------------------------------------*
+     FSFL1002D  CF   E             WORKSTN
+     *------------------------------------------------------------------------*
+     *--------------------------<       INDICATORS     >----------------------*
+     *------------------------------------------------------------------------*
+     D$PINDICATORS     S               *   INZ(%ADDR(*IN))
+     D$INDICATOR       DS                  BASED($PINDICATORS)
+     D$INFORMATION                     N   OVERLAY($INDICATOR:2)                -Información
+     D$EXIT                            N   OVERLAY($INDICATOR:3)                -Salir
+     D$PROMPT                          N   OVERLAY($INDICATOR:4)                -Prompt
+     D$REFRESH                         N   OVERLAY($INDICATOR:5)                -Refresca
+     D$NEW                             N   OVERLAY($INDICATOR:6)                -Nuevo
+     D$CHGVIEW                         N   OVERLAY($INDICATOR:11)               -Cambia de vista de subarch.
+     D$CANCELAR                        N   OVERLAY($INDICATOR:12)               -Salir
+     D$SORT                            N   OVERLAY($INDICATOR:15)               -Ordenar
+     D$FSTPAG                          N   OVERLAY($INDICATOR:17)               -Primera página
+     D$LSTPAG                          N   OVERLAY($INDICATOR:18)               -Última página
+     D$EOFREGSFL                       N   OVERLAY($INDICATOR:25)               -Controla reg. por leer.
+     D$BLKFIL                          N   OVERLAY($INDICATOR:30)               -Filt. con espacio en blanco
+     D$CHGFIL                          N   OVERLAY($INDICATOR:31)               -Cambia filtro
+     D$AVPAG                           N   OVERLAY($INDICATOR:20)               -Avanzar página
+     D$REPAG                           N   OVERLAY($INDICATOR:21)               -Retroceder página
+     D$VIEWREGCTL                      N   OVERLAY($INDICATOR:23)               -Visualiza registro control.
+     D$SEARCH                          N   OVERLAY($INDICATOR:33)               -Controla búsqueda
+     *------------------------------------------------------------------------*
+     *--------------------------<       VARIABLES      >----------------------*
+     *------------------------------------------------------------------------*
+     *                                                                         - TIPO INDICADOR -
+     D@SFLDAT          S              1A                                        -Subfile Data
+     D@VISCRF          S              1A                                        -Filtro de la vista.
+     D@VISSFL          S              1A                                        -Vista del subarchivo
+     D@CHGLEC          S              1A                                        -Cambio de tipo de lectura
+     D@FILSFL          S              1A                                        -Filtro del Subarchivo
+     D@ORDNUM          S              1A   INZ('0')                             -Filtro del Subarchivo
+     D@EXEC            S              1A   INZ(*ZEROS)                          -Condicional para el proc.
+     D@READC           S              1A   INZ(*ZEROS)                          -Para el READC
+     D@VALFEC          S              1A                                        -Valida fecha
+     D@EXIT            S              1A   INZ('0')                             -Salir
+     D@BUSNDOGRL       S              1A   INZ('0')                             -Búsqueda # Doc. general.
+     D@BUSNDOFIL       S              1A   INZ('0')                             -Búsqueda # Doc. por filtro.
+     D@BUSNSIFIL       S              1A   INZ('0')                             -Búsqueda # Doc. por filtro.
+     *                                                                         - TIPO CADENA
+     DSMSGF            S             10A                                        -Archivo de mensajes
+     DSMSGFL           S             10A                                        -Lib. de archivo de mensajes
+     DSMSGID           S              7A   INZ('0000000')                       -Identificador de mensajes.
+     DSCODTBL          S              2A   INZ('24')                            -Cód. de tabla para almac.
+     DSANO             S              4A                                        -Año.
+     DSMES             S              2A                                        -Mes.
+     DSANOMES          S              6A                                        -AñoMes.
+     DSEST             S             10A                                        -Estado.
+     DSTSO             S              2A                                        -Tipo de solicitud.
+     DSNDO             S             16A                                        -Número de documento.
+     DSTACC            S             10A                                        -Tipo de acción.
+     DSFECINI          S             10A                                        -Fecha inicial.
+     DSFECFIN          S             10A                                        -Fecha final.
+     DSCMD             S            100A                                        -Comando.
+     DSFILE            S            100A                                        -Archivo.
+     DSQRYSLTI         S            120A                                        -Query inicial.
+     DSQRYSLTM         S            100A                                        -Query al medio.
+     DSQRYSLTF         S            100A                                        -Query final.
+     DSKEYFLD          S            100A                                        -Campo clave.
+     DSFILSOL          S            100A                                        -Filtro de solicitud.
+     DSFILEST          S            100A                                        -Filtro de estado.
+     DSFILFEC          S            100A                                        -Filtro de fecha.
+     DSFILTSO          S            100A                                        -Filtro de tipo de solicitud
+     DSBLK             S              1A                                        -Blancos.
+     DSFEC             S             10A   INZ('    -  -  ')                    -Fecha.
+     DPSOL             S             10A                                        -Solicitud.
+     *                                                                         - TIPO NUMÉRICO
+     DNREGSFL          S              5P 0                                      -Registros por pantalla.
+     DNMSGID           S              4S 0                                      -Formatea ide. de mensaje.
+     DNNSI             S              7S 0                                      -Número de solicitud.
+     DNBUSNSI          S              7S 0                                      -Número de solicitud.
+     DNOPCGRPBY        S              1S 0                                      -Opción para el Group By.
+     DNCONT            S              5S 0                                      -Número de solicitud.
+     DNCONTADO         S              5S 0                                      -Artículos contados.
+     DNPENDIENTE       S              5S 0                                      -Artículos pendientes.
+     DNTOTNSIGRL       S              5S 0                                      -Total de solicitudes CCT.
+     DNTOTNDOGRL       S              5S 0                                      -Total número de doc.
+     DPNSI             S              7S 0                                      -Número de solicitud.
+     *                                                                         - TIPO FECHA
+     DDFEC             S               D                                        -Fecha.
+     DDFECU            S               D                                        -Fecha de solicitud.
+     DDREUPUN          S               D                                        -Reubicar puntero.
+     DDERR             S               D                                        -Error.
+     *------------------------------------------------------------------------*
+     *----------------<           SYSTEM FEEDBACK            >----------------*
+     *------------------------------------------------------------------------*
+     D                SDS
+     DFPRGNAM                  1     10A                                        -Nombre de programa.
+     DFJOBNAM                244    253A                                        -Nombre de trabajo.
+     DFNOMUSU                254    263A                                        -Nombre de usuario.
+     *------------------------------------------------------------------------*
+     *--------------------------<       STRUCTURES     >----------------------*
+     *------------------------------------------------------------------------*
+     DEXC_CMD          PR                  EXTPGM('QCMDEXC')                    -Importar programa.
+     DCOMMAND                       512A   CONST                                -Comando.
+     DLENGHT                         15P 5 CONST                                -Longitud.
+     D$CMD             S            512A                                        -Comando.
+     *------------------------------------------------------------------------*
+     *--------------------------<       MATRICES       >----------------------*
+     *------------------------------------------------------------------------*
+     *------------------------------------------------------------------------*
+     *--------------------------<          KEY         >----------------------*
+     *------------------------------------------------------------------------*
+     *------------------------------------------------------------------------*
+     *-------------------------< SETUP PROGRAM SQLRPGLE >---------------------*
+     *------------------------------------------------------------------------*
+     C/EXEC SQL
+     C+ SET OPTION COMMIT=*NONE,
+     C+ DATFMT=*ISO
+     C/END-EXEC
+     *------------------------------------------------------------------------*
+     *----------------<         CUERPO PRINCIPAL             >----------------*
+
+     C                   DOW       NOT $EXIT                                    -Mientras F03=OFF
+     C                   EXSR      SRINZVAL                                     -Inicializa valores
+     C                   EXSR      SRGESINT                                     -Gestión interactiva
+     C                   EXSR      SRVALIDA                                     -Valida campos.
+     C                   EXSR      SRTECFUN                                     -Funciones del teclado
+     C  N03              EXSR      SRLECPAG                                     -Lee página.
+     C                   ENDDO                                                  -Fin de hacer
+     C                   MOVE      *ON           *INLR                          -Finalizar de programa
+
+     *----------------<        LECTURA DE PÁGINA             >----------------*
+
+     C     SRLECPAG      BEGSR                                                  -INICIA SUBRUTINA.
+     C                   IF        @EXEC=*OFF                                   -Si no se esta proc. func.
+     C     $CHGFIL       CASEQ     *ON           SRCARFIL                       -Carga filtro.
+     C     $SEARCH       CASEQ     *OFF          SRBUSCAR                       -Busca.
+     C     @READC        CASEQ     *OFF          SLEEDAT                        -Lee data de subarchivo.
+     C                   ENDCS                                                  -Fin de caso.
+     C                   ENDIF                                                  -Fin si.
+     C                   ENDSR                                                  -FINALIZA SUBRUTINA.
+
+     *----------------<         GESTIÓN INTERACTIVA          >----------------*
+
+     C     SRGESINT      BEGSR                                                  -Inicia subrutina.
+     C                   MOVE      SMSGID        NMSGID                         -Mueve # de mensaje.
+     C                   IF        NMSGID > 0                                   -Si existe el mensaje.
+     C                   EXSR      SRSNDMSGQ                                    -Envía mensaje.
+     C                   ENDIF                                                  -Fin Si.
+     C                   EXSR      SRSHWPAG                                     -Muestra página.
+     C                   EXSR      SRDLTMSGQ                                    -Eliminar mensaje.
+     C                   MOVE      $EXIT         @EXIT                          -Asigna indicador.
+     C                   ENDSR                                                  -Fin de subrutina.
+
+     *----------------<            VALIDA CAMPOS             >----------------*
+
+     C     SRVALIDA      BEGSR                                                  -Inicia subrutina.
+     C                   ENDSR                                                  -Finaliza Subrutina.
+
+     *-----------------------< VERIFICACIÓN DE FUNCIONES >--------------------*
+
+     C     SRTECFUN      BEGSR                                                  -Inicia Subrutina.
+     C     $PROMPT       CASEQ     *ON           SRHLPLST                       -Prompt.
+     C     $INFORMATION  CASEQ     *ON           SRINFORMATION                  -Información.
+     C     $REFRESH      CASEQ     *ON           SRRFSPAG                       -Refresca página.
+     C     $NEW          CASEQ     *ON           SRNUEVO                        -Nuevo.
+     C     $FSTPAG       CASEQ     *ON           SRPRIPAG                       -Primera página.
+     C     $LSTPAG       CASEQ     *ON           SRFINPAG                       -Última página.
+     C     $AVPAG        CASEQ     *ON           SRADELANTE                     -Página adelante.
+     C     $REPAG        CASEQ     *ON           SRATRAS                        -Página atrás.
+     C     $CHGVIEW      CASEQ     *ON           SRFIRSTLOAD                    -Carga vista.
+     C     $SORT         CASEQ     *ON           SRSORT                         -Ordena.
+     C                   CAS                     SROTHER                        -Otros.
+     C                   ENDCS                                                  -Fin caso.
+     C                   ENDSR                                                  -Finaliza Subrutina.
+
+     *----------------<                 OTROS                >----------------*
+
+     C     SROTHER       BEGSR                                                  -Inicia subrutina.
+     C                   ENDSR                                                  -Fin de subrutina.
+
+     *----------------<              INFORMATION             >----------------*
+
+     C     SRINFORMATION BEGSR                                                  -Inicia Subrutina
+     C                   ENDSR                                                  -Fin Subrutina.
+
+     *----------------<         UBICAR EN EL PRINCIPIO       >----------------*
+
+     C     SRPRIPAG      BEGSR                                                  -Inicia Subrutina
+     C                   ENDSR                                                  -Finaliza Subrutina.
+
+     *----------------<           UBICAR EN EL FINAL         >----------------*
+
+     C     SRFINPAG      BEGSR                                                  -Inicia Subrutina
+     C                   ENDSR                                                  -Finaliza Subrutina
+
+     *----------------<           ORDENAR SUBARCHIVO         >----------------*
+
+     C     SRSORT        BEGSR                                                  -Inicia Subrutina.
+     C                   ENDSR                                                  -Fin Subrutina.
+
+     *----------------<           PÁGINA ADELANTE            >----------------*
+
+     C     SRADELANTE    BEGSR                                                  -Inicia Subrutina.
+     C                   ENDSR                                                  -Fin Subrutina.
+
+     *----------------<             GROUP BY                 >----------------*
+
+     C     SRGROUPBY     BEGSR
+     C                   ENDSR                                                  -Fin de subrutina.
+
+     *----------------<            PÁGINA ATRAS              >----------------*
+
+     C     SRATRAS       BEGSR                                                  -Inicia Subrutina
+     C                   ENDSR                                                  -Fin Subrutina
+
+     *----------------<           PRIMERA CARGA              >----------------*
+
+     C     SRFIRSTLOAD   BEGSR                                                  -INICIA SUBRUTINA
+     C                   ENDSR                                                  -FIN SUBRUTINA
+
+     *----------------<                 NUEVO                >----------------*
+
+     C     SRNUEVO       BEGSR                                                  -Inicia subrutina.
+     C                   EXSR      SRCLRSFL                                     -Clarea subarchivo.
+     C                   EXSR      SRCARSFL                                     -Carga Subarchivo.
+     C                   ENDSR                                                  -Fin Subrutina.
+
+     *----------------<          SUBRUTINA REFRESCA          >----------------*
+
+     C     SRRFSPAG      BEGSR                                                  -Inicia subrutina.
+     C                   ENDSR                                                  -Fin Subrutina.
+
+     *----------------<             GENERA QUERY             >----------------*
+
+     C     SRGENQRY      BEGSR
+     C                   ENDSR                                                  -Fin de subrutina.
+
+     *----------------<             CARGA FILTRO             >----------------*
+
+     C     SRCARFIL      BEGSR                                                  -INICIA SUBRUTINA.
+     C                   ENDSR                                                  -Finaliza subrutina.
+
+     *----------------<             CLAREA SUBFILE           >----------------*
+
+     C     SRCLRSFL      BEGSR                                                  -Inicializa Subrutina
+     C                   ENDSR                                                  -Finaliza Subrutina
+
+     *----------------<              CARGA SUBFILE           >----------------*
+
+     C     SRCARSFL      BEGSR                                                  -Inicializa Subrutina
+     C                   ENDSR                                                  -Fin Subrutina
+
+     *----------------<  ENVIA MENSAJE A LA COLA DE MENSAJES >----------------*
+
+     C     SRSNDMSGQ     BEGSR                                                  -Inicia Subrutina.
+     C                   CALL      'ZZ90002CL'                                  -Invoca programa.
+     C                   PARM                    SMSGID                         -Id de mensaje.
+     C                   PARM                    SMSGF                          -Archivo de mensaje.
+     C                   PARM                    SMSGFL                         -Librería de archivo.
+     C                   PARM                    @MSGDTA          80            -Data de mensaje.
+     C                   MOVE      *BLANKS       @MSGDTA                        -Blanquea data de mensaje.
+     C                   ENDSR                                                  -Fin Subrutina.
+
+     *----------------< BORRA MENSAJE DE LA COLA DE MENSAJES >----------------*
+
+     C     SRDLTMSGQ     BEGSR                                                  -Inicia Subrutina.
+     C                   CALL      'ZZ90001CL'                                  -Invoca programa.
+     C                   ENDSR                                                  -Fin Subrutina.
+
+     *----------------<         SUBRUTINA MUESTRA            >----------------*
+
+     C     SRSHWPAG      BEGSR                                                  -Inicia Subrutina
+     C                   WRITE     CONTROL                                      -Escribe control
+     C*                  MOVE      *ON           $VIEWREGCTL                    -Visualiza registros control
+     C                   WRITE     FOOTER                                       -Escribe pie de página
+     C*                  WRITE     NODATA                                       -Escribe NoData
+     C*    NR            COMP      *ZEROS                             22        -Visualiza reg. de subarch.
+     C*                  WRITE     SFLMSGCTL                                    -Escribe ctl. msj. sfl.
+     C                   EXFMT     CONTROL                                      -Muestra Control.
+     C                   ENDSR                                                  -Finaliza Subrutina.
+
+     *----------------<         INICIALIZA VALORES           >----------------*
+
+     C     SRINZVAL      BEGSR                                                  -Inicializa Subrutina
+     C                   MOVE      *OFF          @READC                         -Apaga lectura cambiada.
+     C                   MOVE      *OFF          @EXEC                          -Apaga la función de ejec.
+     C                   MOVE      *OFF          *INL1                          -Apaga ind. val. form. fech.
+     C                   MOVE      *OFF          @VALFEC                        -Apaga ind. val. form. fech.
+     C                   MOVE      *OFF          @CHGLEC                        -Apaga cambio de lectura.
+     C                   MOVE      *OFF          $SORT                          -Apaga ordenamiento.
+     C                   MOVE      *OFF          $INFORMATION                   -Apaga información.
+     C                   MOVE      *OFF          $FSTPAG                        -Apaga indicador.
+     C                   MOVE      *OFF          $LSTPAG                        -Apaga indicador.
+     C                   MOVE      *OFF          *INL1                          -Apaga indicador.
+     C                   MOVE      *OFF          *INL2                          -Apaga indicador.
+     C                   MOVE      *OFF          *INL3                          -Apaga indicador.
+     C                   MOVE      *OFF          *INL4                          -Apaga indicador.
+     C                   ENDSR                                                  -Finaliza Subrutina.
+
+     *----------------<              OPCIONES                >----------------*
+
+     C     SROPCIONES    BEGSR                                                  -Inicializa Subrutina
+     C                   ENDSR                                                  -Finaliza Subrutina.
+
+     *----------------<           SUBRUTINA BUSCAR           >----------------*
+
+     C     SRBUSCAR      BEGSR                                                  -Inicia Subrutina.
+     C                   ENDSR                                                  -Finaliza Subrutina.
+
+     *----------------<              LEE SUBFILE             >----------------*
+
+     C     SLEEDAT       BEGSR                                                  -Inicia Subrutina.
+     C                   SELECT
+     C                   WHEN      MNUSEL=1
+     C                   CALL      'MM002'
+     C                   WHEN      MNUSEL=2
+     C                   CALL      'UOP9031C'
+     C                   WHEN      MNUSEL=4
+     C                   MOVE      *ON           $EXIT
+     C                   WHEN      MNUSEL=10
+     C                   CALL      'SFL6001R'
+     C                   WHEN      MNUSEL=11
+     C                   CALL      'LIBERALX'
+     C                   WHEN      MNUSEL=12
+     C                   CALL      'UOP9057R'
+     C                   ENDSL
+     C                   ENDSR                                                  -Finaliza Subrutina.
+
+     *----------------<               PROMPT                 >----------------*
+
+     C     SRHLPLST      BEGSR                                                  -Inicia Subrutina.
+     C*                  EXFMT     FMT01
+     C                   ENDSR                                                  -Finaliza Subrutina.
+
+     *----------------<         CARGA DATOS DEL PGM          >----------------*
+
+     C     SRLOADPGM     BEGSR
+     C                   MOVE      *ON           $SEARCH
+     C                   ENDSR                                                  -Fin de subrutina.
+
+     *----------------<         INICIALIZA PROGRAMA          >----------------*
+
+     C     *INZSR        BEGSR                                                  Inicia subrutina.
+     *                                                                         - PARÁMETROS DE ENTRADA
+     C     *ENTRY        PLIST                                                  -Lista de entrada.
+     C                   PARM                    PCIA              2            -Parm: Compañía.
+     C                   PARM                    PCODALM           2            -Parm: Código de almacén.
+     *                                                                         -- CARGA DATOS DEL PGM --
+     C                   EXSR      SRLOADPGM                                    -SR: Carga programa.
+     *                                                                         -- PRIMERA CARGA --
+     C                   EXSR      SRFIRSTLOAD                                  -SR: Primera carga.
+     *                                                                         -- CARGA FILTRO --
+     C                   EXSR      SRCARFIL                                     -Carga página por defecto.
+     *
+     C                   ENDSR                                                  Finaliza subrutina.
